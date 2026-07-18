@@ -300,6 +300,97 @@ async def get_portfolio_summary_text(chat_id: int) -> str:
         
     return msg
 
+async def get_rebalance_tips(chat_id: int) -> str:
+    """Generates portfolio rebalancing strategy tips based on asset allocations and TA trends."""
+    holdings = db.get_portfolio(chat_id)
+    if not holdings:
+        return ""
+        
+    # Get live prices
+    symbols = list(set(item['symbol'] for item in holdings))
+    prices = {}
+    for sym in symbols:
+        try:
+            prices[sym] = market.get_live_price(sym)
+        except Exception:
+            prices[sym] = 0.0
+            
+    # Calculate values
+    total_val = 0.0
+    symbol_totals = {}
+    for item in holdings:
+        price = prices.get(item['symbol'], 0.0)
+        val = item['amount'] * price
+        total_val += val
+        
+        # Group by underlying
+        underlying = market.resolve_ta_symbol(item['symbol'])
+        symbol_totals[underlying] = symbol_totals.get(underlying, 0.0) + val
+        
+    if total_val == 0:
+        return ""
+        
+    allocations = {sym: val / total_val for sym, val in symbol_totals.items()}
+    volatile_symbols = [sym for sym in allocations if not re.match(r'^(A?USDT|A?USDC|A?DAI|BUSD|USD)$', sym)]
+    
+    ta_reports = {}
+    for sym in volatile_symbols:
+        try:
+            report = market.run_technical_analysis(sym)
+            if "error" not in report:
+                ta_reports[sym] = report
+        except Exception as e:
+            logger.error(f"Error calculating TA for rebalancing check of {sym}: {e}")
+            
+    tips = []
+    
+    # Rule 1: Overexposure Check (> 35% of total portfolio)
+    for sym, alloc in allocations.items():
+        if sym in volatile_symbols and alloc > 0.35:
+            alloc_pct = alloc * 100
+            report = ta_reports.get(sym)
+            if report:
+                rec = report['recommendation']
+                # If current trend is weak or neutral, suggest trim
+                if any(x in rec.upper() for x in ['SELL', 'REDUCE', 'NEUTRAL', 'HOLD']):
+                    tips.append(
+                        f"⚠️ *Overexposure Risk ({sym}):* You are heavily allocated in *{sym}* (*{alloc_pct:.1f}%* of total portfolio, target guideline is under 35%), "
+                        f"and its short-term technical setup is currently *{rec}*. Consider trimming your position or rotating a portion into stablecoins."
+                    )
+                    
+    # Rule 2: Under-allocated and Bullish Opportunity (< 15% allocation)
+    for sym, alloc in allocations.items():
+        if sym in volatile_symbols and alloc < 0.15:
+            alloc_pct = alloc * 100
+            report = ta_reports.get(sym)
+            if report:
+                rec = report['recommendation']
+                if any(x in rec.upper() for x in ['BUY', 'ACCUMULATE']):
+                    tips.append(
+                        f"💡 *Accumulation Opportunity ({sym}):* *{sym}* is showing a bullish *{rec}* signal, but only represents *{alloc_pct:.1f}%* of your portfolio. "
+                        f"Consider building up your position if you want more exposure to this asset."
+                    )
+                    
+    # Rule 3: Dry Powder (Stablecoin Buffer) Check
+    stable_alloc = sum(alloc for sym, alloc in allocations.items() if sym not in volatile_symbols)
+    stable_pct = stable_alloc * 100
+    if stable_alloc < 0.10:
+        # Check if there are active buy signals on volatile coins
+        buy_signals = [sym for sym, r in ta_reports.items() if any(x in r['recommendation'].upper() for x in ['BUY', 'ACCUMULATE'])]
+        if buy_signals:
+            tips.append(
+                f"💵 *Low Dry Powder:* Your stablecoin cash buffer is low (*{stable_pct:.1f}%*). "
+                f"Consider securing some profit (targeting a 10-20% stablecoin reserve) to buy potential dips on bullish coins like {', '.join(buy_signals)}."
+            )
+            
+    if not tips:
+        return "⚖️ *Rebalancing Strategy:* Your portfolio allocation is currently well-balanced. No immediate adjustments suggested based on technical analysis."
+        
+    tip_text = "⚖️ *Portfolio Rebalancing Strategy Tips:*\n\n"
+    for tip in tips:
+        tip_text += f"• {tip}\n\n"
+    return tip_text
+
 # --- COMMAND HANDLERS ---
 
 @restricted
@@ -469,6 +560,11 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"  RSI: `{report['rsi']:.1f}` | SMA20: `${report['sma20']:,.2f}`\n\n"
                 )
                 
+        # Append portfolio rebalancing tips
+        tips_msg = await get_rebalance_tips(chat_id)
+        if tips_msg:
+            msg += "\n---\n\n" + tips_msg
+            
         await update.message.reply_text(msg, parse_mode="Markdown")
         return
         
@@ -725,6 +821,11 @@ async def weekly_digest_job(context: ContextTypes.DEFAULT_TYPE):
                         except Exception as e:
                             ta_text += f"• *{symbol}*: Failed to fetch TA data: {e}\n"
                             
+                    # Append rebalancing tips
+                    tips_msg = await get_rebalance_tips(chat_id)
+                    if tips_msg:
+                        ta_text += "\n---\n\n" + tips_msg
+                        
                     await context.bot.send_message(
                         chat_id=chat_id,
                         text=ta_text,
