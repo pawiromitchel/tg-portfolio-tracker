@@ -197,6 +197,26 @@ def remove_holding(chat_id: int, symbol: str, amount: float = None, wallet: str 
     finally:
         conn.close()
 
+def update_holding_price(chat_id: int, symbol: str, buy_price: float, wallet: str = 'default'):
+    """Updates the cost basis (buy price) of an existing holding in the given wallet."""
+    symbol = symbol.upper().strip()
+    wallet = wallet.lower().strip() if wallet else 'default'
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            UPDATE portfolio 
+            SET buy_price = ?, updated_at = ? 
+            WHERE chat_id = ? AND symbol = ? AND wallet = ?
+        """, (buy_price, datetime.utcnow().isoformat(), chat_id, symbol, wallet))
+        conn.commit()
+        logger.info(f"Updated price for user {chat_id} in {wallet}: {symbol} buy_price={buy_price}")
+    except Exception as e:
+        logger.error(f"Error updating price for {chat_id} in {wallet}: {e}")
+        raise e
+    finally:
+        conn.close()
+
 def get_portfolio(chat_id: int):
     """Returns all crypto holdings for a user with their associated wallets."""
     conn = get_connection()

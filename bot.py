@@ -472,6 +472,46 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Amount and price must be valid numbers.")
 
 @restricted
+async def setprice_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Sets/updates the buy price (cost basis) of an existing holding."""
+    chat_id = update.effective_chat.id
+    args = context.args
+    
+    if len(args) < 2:
+        await update.message.reply_text(
+            "❌ *Usage:* `/setprice <symbol> <price> [wallet]`\nExample: `/setprice BTC 63950 ledger`",
+            parse_mode="Markdown"
+        )
+        return
+        
+    symbol = args[0].upper().strip()
+    try:
+        price = float(args[1])
+        wallet = args[2].strip().lower() if len(args) > 2 else 'default'
+        
+        portfolio = db.get_portfolio(chat_id)
+        exists = False
+        for item in portfolio:
+            if item['symbol'].upper() == symbol and item['wallet'].lower() == wallet:
+                exists = True
+                break
+                
+        if not exists:
+            await update.message.reply_text(
+                f"❌ Holding for *{symbol}* in *{wallet}* wallet not found. Use `/add` to add it first.",
+                parse_mode="Markdown"
+            )
+            return
+            
+        db.update_holding_price(chat_id, symbol, price, wallet)
+        await update.message.reply_text(
+            f"✅ Updated cost basis for *{symbol}* in *{wallet}* wallet to *${price:,.2f}*.",
+            parse_mode="Markdown"
+        )
+    except ValueError:
+        await update.message.reply_text("❌ Price must be a valid number.")
+
+@restricted
 async def remove_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Removes a holding from the portfolio."""
     chat_id = update.effective_chat.id
@@ -843,6 +883,7 @@ async def post_init(application: Application):
         BotCommand("balance", "Show portfolio balance and allocation"),
         BotCommand("add", "Add holdings: /add <symbol> <amount> [price] [wallet]"),
         BotCommand("remove", "Remove holdings: /remove <symbol> [amount] [wallet]"),
+        BotCommand("setprice", "Set cost basis: /setprice <symbol> <price> [wallet]"),
         BotCommand("analyze", "Run technical analysis: /analyze <symbol> or all"),
         BotCommand("schedule", "Customize weekly report: /schedule [Day HH:MM]"),
         BotCommand("help", "Show instructions and command usage")
@@ -876,6 +917,7 @@ def main():
     application.add_handler(CommandHandler("portfolio", balance_command))
     application.add_handler(CommandHandler("add", add_command))
     application.add_handler(CommandHandler("remove", remove_command))
+    application.add_handler(CommandHandler("setprice", setprice_command))
     application.add_handler(CommandHandler("analyze", analyze_command))
     application.add_handler(CommandHandler("schedule", schedule_command))
     
