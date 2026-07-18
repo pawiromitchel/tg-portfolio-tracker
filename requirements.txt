@@ -1,0 +1,8 @@
+python-telegram-bot>=20.0
+ccxt>=4.0.0
+pandas>=2.0.0
+apscheduler>=3.10.0
+SpeechRecognition>=3.10.0
+pydub>=0.25.1
+python-dotenv>=1.0.0
+matplotlib>=3.7.0
