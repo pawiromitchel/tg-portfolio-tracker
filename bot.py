@@ -284,11 +284,12 @@ async def get_portfolio_summary_text(chat_id: int) -> str:
             msg += f" • *{item['symbol']}*: {item['amount']:.4f} @ ${item['current_price']:,.2f} = *${item['current_value']:,.2f}*{pnl_str}\n"
         msg += "\n"
         
-    # Allocation section (aggregated across all wallets)
+    # Allocation section (aggregated across all wallets, resolved to underlying assets)
     msg += "🍕 *Total Asset Allocation:*\n"
     symbol_totals = {}
     for item in items_data:
-        sym = item['symbol']
+        # Resolve to standard underlying asset for allocation grouping (e.g. aUSDC -> USDC, cbBTC -> BTC)
+        sym = market.resolve_ta_symbol(item['symbol'])
         symbol_totals[sym] = symbol_totals.get(sym, 0.0) + item['current_value']
         
     sorted_symbols = sorted(symbol_totals.items(), key=lambda x: x[1], reverse=True)
