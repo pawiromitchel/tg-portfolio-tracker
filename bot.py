@@ -245,10 +245,28 @@ async def get_portfolio_summary_text(chat_id: int) -> str:
             wallets_grouped[w] = []
         wallets_grouped[w].append(item)
         
+    # Calculate total PnL across the portfolio
+    total_pnl_usd = 0.0
+    total_cost_for_pnl = 0.0
+    for item in items_data:
+        if item['buy_price'] and item['buy_price'] > 0:
+            total_cost_for_pnl += item['amount'] * item['buy_price']
+            total_pnl_usd += item['pnl_usd']
+            
+    total_pnl_pct = 0.0
+    if total_cost_for_pnl > 0:
+        total_pnl_pct = (total_pnl_usd / total_cost_for_pnl) * 100
+        
+    pnl_sign = "+" if total_pnl_usd >= 0 else "-"
+    pnl_indicator = "🟢 " if total_pnl_usd >= 0 else "🔴 "
+    
     # Build text response
     msg = f"📊 *Portfolio Balance Overview*\n"
     msg += f"📅 _As of {datetime.now().strftime('%Y-%m-%d %H:%M')}_\n\n"
-    msg += f"💰 *Total Balance:* `${total_val:,.2f} USD`\n\n"
+    msg += f"💰 *Total Balance:* `${total_val:,.2f} USD`\n"
+    if total_cost_for_pnl > 0:
+        msg += f"📈 *Total PnL:* {pnl_indicator}{pnl_sign}${abs(total_pnl_usd):,.2f} ({total_pnl_pct:+.1f}%)\n"
+    msg += "\n"
     
     # Sort wallet names: 'default' first, then others alphabetically
     def wallet_sort_key(name):
