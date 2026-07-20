@@ -443,6 +443,20 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Replies with user portfolio balance."""
     chat_id = update.effective_chat.id
+    portfolio = db.get_portfolio(chat_id)
+    if not portfolio:
+        await update.message.reply_text(
+            "❌ *Your portfolio is empty.*\nUse `/add <symbol> <amount> [buy_price] [wallet]` to add coins!",
+            parse_mode="Markdown"
+        )
+        return
+
+    unique_symbols = sorted(list(set(item['symbol'] for item in portfolio)))
+    await update.message.reply_text(
+        f"🔍 Fetching prices and calculating balance for: {', '.join(unique_symbols)}... Please wait.",
+        parse_mode="Markdown"
+    )
+    
     msg = await get_portfolio_summary_text(chat_id)
     await update.message.reply_text(msg, parse_mode="Markdown")
 
