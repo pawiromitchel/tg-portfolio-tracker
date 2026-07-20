@@ -40,9 +40,28 @@ Verify that the database, stablecoin mapping, technical indicators, and speech c
 ```
 
 ### 3. Start the Bot
-Run the bot service:
+
+#### Option A: Running Locally
+Run the bot service directly:
 ```bash
 .venv/bin/python bot.py
+```
+
+#### Option B: Running with Docker Compose
+Alternatively, build and run the bot container in the background:
+```bash
+docker compose up -d
+```
+*Note: Your `portfolio.db` is mounted as a volume so database changes persist on the host.*
+
+To view logs:
+```bash
+docker compose logs -f
+```
+
+To stop the container:
+```bash
+docker compose down
 ```
 
 ---
